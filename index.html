@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Lightweight Image Editor</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.2.4/fabric.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+    #canvas-container { border: 1px solid #ccc; margin: 10px auto; display: inline-block; }
+    button, input { margin: 5px; padding: 8px; }
+    #controls { margin-bottom: 10px; }
+    canvas { max-width: 100%; height: auto; }
+  </style>
+</head>
+<body>
+  <h2>Lightweight Image Editor</h2>
+
+  <div id="controls">
+    <input type="file" id="imgLoader" accept="image/*">
+    <button onclick="enableDrawing()">Draw</button>
+    <button onclick="disableDrawing()">Select / Move</button>
+    <button onclick="addText()">Add Text</button>
+    <button onclick="undo()">Undo</button>
+    <button onclick="downloadImage()">Download</button>
+  </div>
+
+  <div id="canvas-container">
+    <canvas id="c" width="900" height="600"></canvas>
+  </div>
+
+  <script>
+    const canvas = new fabric.Canvas('c', { isDrawingMode: false });
+    const history = [];
+
+    // Keep basic undo
+    function pushHistory() {
+      try { history.push(canvas.toJSON(['selectable'])); if(history.length>50) history.shift(); } catch(e){}
+    }
+
+    // Load uploaded image
+    document.getElementById('imgLoader').addEventListener('change', function (e) {
+      const file = e.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        fabric.Image.fromURL(event.target.result, function (img) {
+          canvas.clear();
+          // Fit image into canvas
+          const maxW = canvas.width;
+          const maxH = canvas.height;
+          img.scaleToWidth(maxW);
+          if(img.getScaledHeight() > maxH) img.scaleToHeight(maxH);
+          canvas.add(img);
+          canvas.sendToBack(img);
+          pushHistory();
+        }, { crossOrigin: 'anonymous' });
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Enable drawing mode
+    function enableDrawing() {
+      canvas.isDrawingMode = true;
+      canvas.freeDrawingBrush.width = 4;
+      canvas.freeDrawingBrush.color = "red";
+    }
+
+    // Disable drawing mode
+    function disableDrawing() {
+      canvas.isDrawingMode = false;
+    }
+
+    // Add text
+    function addText() {
+      const text = new fabric.Textbox("Double-click to edit", {
+        left: 50,
+        top: 50,
+        fontSize: 24,
+        fill: '#000',
+        editable: true
+      });
+      canvas.add(text).setActiveObject(text);
+      pushHistory();
+    }
+
+    // Simple undo
+    function undo() {
+      if(history.length > 1) {
+        history.pop(); // current state
+        const prev = history[history.length-1];
+        canvas.loadFromJSON(prev, () => { canvas.renderAll(); });
+      }
+    }
+
+    // Track object additions/changes for undo
+    canvas.on('object:added', pushHistory);
+    canvas.on('object:modified', pushHistory);
+    canvas.on('object:removed', pushHistory);
+
+    // Download edited image
+    function downloadImage() {
+      // remove active selection for clean export
+      canvas.discardActiveObject();
+      canvas.renderAll();
+      const dataURL = canvas.toDataURL({ format: 'png', multiplier: 1 });
+      const link = document.createElement('a');
+      link.href = dataURL;
+      link.download = 'edited-image.png';
+      link.click();
+    }
+
+    // Initialize empty history
+    pushHistory();
+  </script>
+</body>
+</html>
